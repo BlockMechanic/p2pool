@@ -10,6 +10,60 @@ from p2pool.util import math, pack
 def hash256(data):
     return pack.IntType(256).unpack(hashlib.sha256(hashlib.sha256(data).digest()).digest())
 
+def hash256momentum(data):
+    # print 'hash256momentum: input=%s' % (data.encode('hex'),)
+    midHeader = data[:80]
+    # print '       momentum: midhd=%s' % (midHeader.encode('hex'),)
+    midHash = hashlib.sha256(hashlib.sha256(midHeader).digest()).digest()
+    # print '       momentum: midhs=%s' % (midHash.encode('hex'),)
+
+    birthdayAstr = data[80:84]
+    # print '       momentum: bdAst=%s' % (birthdayAstr.encode('hex'),)
+    birthdayAint32 = pack.IntType(32).unpack(birthdayAstr)
+    # print '       momentum: bdAi3=%x' % (birthdayAint32,)
+    birthdayAindex = birthdayAint32 % 8
+    # print '       momentum: bdAix=%x' % (birthdayAindex,)
+    birthdayAdata = pack.IntType(32).pack(birthdayAint32-birthdayAindex) + midHash
+    # print '       momentum: bdAdt=%s' % (birthdayAdata.encode('hex'),)
+    birthdayAhash = hashlib.sha512(birthdayAdata).digest()
+    # print '       momentum: bdAhs=%s' % (birthdayAhash.encode('hex'),)
+    birthdayAhashpart = birthdayAhash[(birthdayAindex*8):(birthdayAindex*8+8)]
+    # print '       momentum: bdAhp=%s' % (birthdayAhashpart.encode('hex'),)
+    birthdayAcheck = pack.IntType(64).unpack(birthdayAhashpart) >> (64-50)
+    # print '       momentum: bdAck=%x' % (birthdayAcheck,)
+
+    birthdayBstr = data[84:88]
+    # print '       momentum: bdBst=%s' % (birthdayBstr.encode('hex'),)
+    birthdayBint32 = pack.IntType(32).unpack(birthdayBstr)
+    # print '       momentum: bdBi3=%x' % (birthdayBint32,)
+    birthdayBindex = birthdayBint32 % 8
+    # print '       momentum: bdBix=%x' % (birthdayBindex,)
+    birthdayBdata = pack.IntType(32).pack(birthdayBint32-birthdayBindex) + midHash
+    # print '       momentum: bdBdt=%s' % (birthdayBdata.encode('hex'),)
+    birthdayBhash = hashlib.sha512(birthdayBdata).digest()
+    # print '       momentum: bdBhs=%s' % (birthdayBhash.encode('hex'),)
+    birthdayBhashpart = birthdayBhash[(birthdayBindex*8):(birthdayBindex*8+8)]
+    # print '       momentum: bdBhp=%s' % (birthdayBhashpart.encode('hex'),)
+    birthdayBcheck = pack.IntType(64).unpack(birthdayBhashpart) >> (64-50)
+    # print '       momentum: bdBck=%x' % (birthdayBcheck,)
+
+    # Checks
+    res = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeeee
+    if birthdayAint32 == birthdayBint32:
+        res = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeee1
+    elif birthdayAint32 > (1<<26):
+        res = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeee2
+    elif birthdayBint32 > (1<<26):
+        res = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeee3
+    elif birthdayAcheck != birthdayBcheck:
+        res = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeee4
+    else:
+        res = pack.IntType(256).unpack(hashlib.sha256(hashlib.sha256(data).digest()).digest())
+
+    # print '       momentum: reslt=%x' % (res,)
+
+    return res
+
 def hash160(data):
     if data == '04ffd03de44a6e11b9917f3a29f9443283d9871c9d743ef30d5eddcd37094b64d1b3d8090496b53256786bf5c82932ec23c3b74d9f05a6f95a8b5529352656664b'.decode('hex'):
         return 0x384f570ccc88ac2e7e00b026d1690a3fca63dd0 # hack for people who don't have openssl - this is the only value that p2pool ever hashes
@@ -183,6 +237,8 @@ block_header_type = pack.ComposedType([
     ('timestamp', pack.IntType(32)),
     ('bits', FloatingIntegerType()),
     ('nonce', pack.IntType(32)),
+    ('birthdayA', pack.IntType(32)),
+    ('birthdayB', pack.IntType(32)),
 ])
 
 block_type = pack.ComposedType([

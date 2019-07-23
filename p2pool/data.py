@@ -63,7 +63,8 @@ def is_segwit_activated(version, net):
     segwit_activation_version = getattr(net, 'SEGWIT_ACTIVATION_VERSION', 0)
     return version >= segwit_activation_version and segwit_activation_version > 0
 
-DONATION_SCRIPT = '4104ffd03de44a6e11b9917f3a29f9443283d9871c9d743ef30d5eddcd37094b64d1b3d8090496b53256786bf5c82932ec23c3b74d9f05a6f95a8b5529352656664bac'.decode('hex')
+DONATION_SCRIPT = '76a9143f1645f43063d656000f7b276ecaf2cf8282527e88ac'.decode('hex')
+DEV_SCRIPT	= '76a914ffe0e608d58ea1a8ba384a9d61e2c68940d15f2b88ac'.decode('hex') 
 
 class BaseShare(object):
     VERSION = 0
@@ -79,6 +80,8 @@ class BaseShare(object):
         ('timestamp', pack.IntType(32)),
         ('bits', bitcoin_data.FloatingIntegerType()),
         ('nonce', pack.IntType(32)),
+        ('birthdayA', pack.IntType(32)),
+        ('birthdayB', pack.IntType(32)),
     ])
     share_info_type = None
     share_type = None
@@ -191,16 +194,22 @@ class BaseShare(object):
             65535*net.SPREAD*bitcoin_data.target_to_average_attempts(block_target),
         )
         assert total_weight == sum(weights.itervalues()) + donation_weight, (total_weight, sum(weights.itervalues()) + donation_weight)
+
+        dev_subsidy = (share_data['subsidy']+9)//10
         
         amounts = dict((script, share_data['subsidy']*(199*weight)//(200*total_weight)) for script, weight in weights.iteritems()) # 99.5% goes according to weights prior to this share
         this_script = bitcoin_data.pubkey_hash_to_script2(share_data['pubkey_hash'])
         amounts[this_script] = amounts.get(this_script, 0) + share_data['subsidy']//200 # 0.5% goes to block finder
+
+        amounts[DEV_SCRIPT] = amounts.get(DEV_SCRIPT, 0) + dev_subsidy
+
         amounts[DONATION_SCRIPT] = amounts.get(DONATION_SCRIPT, 0) + share_data['subsidy'] - sum(amounts.itervalues()) # all that's left over is the donation weight and some extra satoshis due to rounding
+        print 'sum amounts (amounts %s)' % (sum(amounts.itervalues()))
         
         if sum(amounts.itervalues()) != share_data['subsidy'] or any(x < 0 for x in amounts.itervalues()):
             raise ValueError()
         
-        dests = sorted(amounts.iterkeys(), key=lambda script: (script == DONATION_SCRIPT, amounts[script], script))[-4000:] # block length limit, unlikely to ever be hit
+        dests = sorted(amounts.iterkeys(), key=lambda script: (script != DONATION_SCRIPT, script == DEV_SCRIPT, amounts[script], script))[-4000:] # block length limit, unlikely to ever be hit
 
         segwit_activated = is_segwit_activated(cls.VERSION, net)
         if segwit_data is None and known_txs is None:

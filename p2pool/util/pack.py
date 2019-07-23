@@ -13,6 +13,7 @@ class LateEnd(Exception):
 def read((data, pos), length):
     data2 = data[pos:pos + length]
     if len(data2) != length:
+	print data2, len(data2)
         raise EarlyEnd()
     return data2, (data, pos + length)
 
